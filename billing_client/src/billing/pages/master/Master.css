@@ -184,6 +184,50 @@
   min-width: 76px;
 }
 
+.mst-table .purchase-tot {
+  font-weight: 700;
+  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+}
+
+.mst-table .purchase-tot-net {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+}
+
+.mst-table tfoot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.mst-table tfoot td {
+  border-bottom: none;
+  border-top: 2px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg-surface));
+}
+
+.mst-table tfoot .purchase-sum-label {
+  text-align: right;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: var(--color-primary);
+}
+
+.mst-table tfoot .purchase-sum {
+  font-weight: 800;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 16%, var(--color-bg-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+.mst-table tfoot .purchase-sum-net {
+  color: #b45309;
+  background: #fff7ed;
+  box-shadow: inset 0 0 0 1.5px #fdba74;
+}
+
 .mst-table .purchase-line-edit .mst-conv-hint {
   text-align: right;
   white-space: nowrap;

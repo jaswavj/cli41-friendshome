@@ -9,10 +9,13 @@ public class SavePurchaseRequest {
     private Long supplierId;
     private String invoiceNo;
     private String invoiceDate;
+    private Integer payMode;
     private Integer payType;
     private Integer bankId;
     private Double grandTotal;
     private Double paidAmount;
+    private Double cashPaid;
+    private Double bankPaid;
     private Double extraDisc;
     private Double balanceAmount;
     private List<PurchaseLineRequest> products;

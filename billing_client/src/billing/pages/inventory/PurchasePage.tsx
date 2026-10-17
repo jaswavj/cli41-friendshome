@@ -46,6 +46,11 @@ type Hist = {
 const today = () => new Date().toISOString().slice(0, 10);
 const n = (v: string | number) => Number(v) || 0;
 const money = (v: number) => (Number.isFinite(v) ? v.toFixed(3) : '0.000');
+const qtyText = (v: number) => {
+  if (!Number.isFinite(v)) return '0';
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+};
 
 const productConvFactor = (p: Product) => {
   if (!p.convertionUnit?.trim()) return 0;
@@ -107,15 +112,15 @@ const calcLine = (line: Line) => {
 
 const PurchasePage: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [payTypes, setPayTypes] = useState<Named[]>([]);
-  const [banks, setBanks] = useState<Named[]>([]);
   const [supplierId, setSupplierId] = useState('0');
   const [invoiceNo, setInvoiceNo] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(today());
-  const [payType, setPayType] = useState('0');
-  const [bankId, setBankId] = useState('0');
-  const [paid, setPaid] = useState('0.000');
+  const [mode, setMode] = useState('1');
+  const [payType, setPayType] = useState('1');
+  const [cashPaid, setCashPaid] = useState('0.000');
+  const [bankPaid, setBankPaid] = useState('0.000');
   const [extra, setExtra] = useState('0.000');
+  const autoPay = useRef(true);
   const [lines, setLines] = useState<Line[]>([]);
   const [key, setKey] = useState(1);
   const [search, setSearch] = useState('');
@@ -134,8 +139,6 @@ const PurchasePage: React.FC = () => {
     inventoryApi.lookups().then((res) => {
       const data = invData<any>(res);
       setSuppliers(data.suppliers || []);
-      setPayTypes((data.paymentTypes || []).filter((p: Named) => p.id !== 0));
-      setBanks(data.banks || []);
     }).catch((err) => toast.error(invError(err, 'Could not load lookups')));
   }, []);
 
@@ -256,28 +259,54 @@ const PurchasePage: React.FC = () => {
     return lines.reduce(
       (acc, line) => {
         const c = calcLine(line);
+        acc.qty += n(line.qty);
+        acc.free += n(line.free);
         acc.cost += c.costTotal;
         acc.mrp += c.mrpTotal;
         acc.tax += c.taxAmt;
         acc.net += c.netTotal;
         return acc;
       },
-      { cost: 0, mrp: 0, tax: 0, net: 0 }
+      { qty: 0, free: 0, cost: 0, mrp: 0, tax: 0, net: 0 }
     );
   }, [lines]);
 
   const grand = Math.max(0, sums.net - n(extra));
-  const balance = Math.max(0, grand - n(paid));
+  const cashAmt = n(cashPaid);
+  const bankAmt = n(bankPaid);
+  const paidAmt = cashAmt + bankAmt;
+  const balance = Math.max(0, grand - paidAmt);
+  const paidOver = paidAmt - grand > 0.001;
+  const needSupplier = supplierId === '0';
+  const needInvoice = !invoiceNo.trim();
+  const needDate = !invoiceDate;
+  const bankMode = mode !== '1';
+
+  useEffect(() => {
+    if (!confirmOpen || !autoPay.current) return;
+    if (mode === '1') {
+      setCashPaid(money(grand));
+      setBankPaid('0.000');
+    } else if (mode === '2') {
+      setCashPaid('0.000');
+      setBankPaid(money(grand));
+    }
+  }, [grand, mode, confirmOpen]);
+
+  const applyMode = (next: string) => {
+    autoPay.current = true;
+    setMode(next);
+    if (next !== '1' && payType === '0') setPayType('1');
+    if (next === '3') {
+      setCashPaid(money(grand));
+      setBankPaid('0.000');
+    }
+  };
 
   const onSupplier = (id: string) => {
     setSupplierId(id);
     const sup = suppliers.find((s) => String(s.id) === id);
-    if (sup?.isGst === 1) {
-      const bank = banks.find((b) => b.id === 2) || banks[0];
-      const upi = payTypes.find((p) => p.id === 2) || payTypes.find((p) => /bank|upi/i.test(p.name));
-      if (upi) setPayType(String(upi.id));
-      if (bank) setBankId(String(bank.id));
-    }
+    if (sup?.isGst === 1) applyMode('2');
   };
 
   const closeHistory = () => {
@@ -321,12 +350,16 @@ const PurchasePage: React.FC = () => {
       toast.warning('Please enter invoice number.');
       return false;
     }
-    if (payType === '0') {
-      toast.warning('Please select payment mode.');
+    if (bankMode && (!payType || payType === '0')) {
+      toast.warning('Please select bank type.');
       return false;
     }
-    if (payType !== '1' && bankId === '0') {
-      toast.warning('Please select payment mode (Bank details).');
+    if (cashAmt < 0 || bankAmt < 0) {
+      toast.error('Paid amount cannot be negative.');
+      return false;
+    }
+    if (paidOver) {
+      toast.error('Paid amount cannot be more than payable amount.');
       return false;
     }
     return true;
@@ -334,6 +367,11 @@ const PurchasePage: React.FC = () => {
 
   const openConfirm = () => {
     if (!canOpenSave()) return;
+    autoPay.current = true;
+    setMode('1');
+    setPayType('1');
+    setCashPaid(money(grand));
+    setBankPaid('0.000');
     setConfirmOpen(true);
   };
 
@@ -347,10 +385,13 @@ const PurchasePage: React.FC = () => {
           supplierId: Number(supplierId),
           invoiceNo: invoiceNo.trim(),
           invoiceDate,
-          payType: Number(payType),
-          bankId: Number(bankId),
+          payMode: Number(mode),
+          payType: mode === '1' ? 0 : Number(payType),
+          bankId: 0,
           grandTotal: grand,
-          paidAmount: n(paid),
+          paidAmount: paidAmt,
+          cashPaid: mode === '2' ? 0 : cashAmt,
+          bankPaid: mode === '1' ? 0 : bankAmt,
           extraDisc: n(extra),
           balanceAmount: balance,
           products: products.map((l) => ({
@@ -370,7 +411,10 @@ const PurchasePage: React.FC = () => {
       setConfirmOpen(false);
       setLines([]);
       setInvoiceNo('');
-      setPaid('0.000');
+      setMode('1');
+      setPayType('1');
+      setCashPaid('0.000');
+      setBankPaid('0.000');
       setExtra('0.000');
     } catch (err) {
       toast.error(invError(err, 'Save failed'));
@@ -522,22 +566,29 @@ const PurchasePage: React.FC = () => {
                       <i className="fas fa-history" />
                     </button>
                   </td>
-                  <td className="num">{money(c.costTotal)}</td>
-                  <td className="num">{money(c.mrpTotal)}</td>
-                  <td className="num">{money(c.taxAmt)}</td>
-                  <td className="num">{money(c.netTotal)}</td>
+                  <td className="num purchase-tot">{money(c.costTotal)}</td>
+                  <td className="num purchase-tot">{money(c.mrpTotal)}</td>
+                  <td className="num purchase-tot">{money(c.taxAmt)}</td>
+                  <td className="num purchase-tot purchase-tot-net">{money(c.netTotal)}</td>
                   <td className="num">{money(c.unit)}</td>
                 </tr>
               );
             })}
           </tbody>
           <tfoot>
-            <tr>
-              <td colSpan={9} style={{ textAlign: 'right' }}>Summary Total:</td>
-              <td className="num">{money(sums.cost)}</td>
-              <td className="num">{money(sums.mrp)}</td>
-              <td className="num">{money(sums.tax)}</td>
-              <td className="num">{money(sums.net)}</td>
+            <tr className="purchase-sum-row">
+              <td colSpan={2} className="purchase-sum-label">Summary</td>
+              <td className="num purchase-sum">{qtyText(sums.qty)}</td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td className="num purchase-sum">{qtyText(sums.free)}</td>
+              <td></td>
+              <td className="num purchase-sum">{money(sums.cost)}</td>
+              <td className="num purchase-sum">{money(sums.mrp)}</td>
+              <td className="num purchase-sum">{money(sums.tax)}</td>
+              <td className="num purchase-sum purchase-sum-net">{money(sums.net)}</td>
               <td></td>
             </tr>
           </tfoot>
@@ -552,77 +603,163 @@ const PurchasePage: React.FC = () => {
       </div>
       {confirmOpen && (
         <div className="pos-modal-back" onClick={() => !busy && setConfirmOpen(false)}>
-          <div className="pos-modal pos-save-modal pos-purchase-add-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="pos-modal pos-save-modal pos-purchase-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="pos-save-head">
               <h4>Confirm Purchase</h4>
-              <button className="pos-btn pos-btn-outline" type="button" disabled={busy} onClick={() => setConfirmOpen(false)}>
-                Close
-              </button>
+              <div className="pos-save-head-amt" title="Amount to pay">
+                <span>Payable</span>
+                <strong>₹{money(grand)}</strong>
+              </div>
             </div>
             <div className="pos-save-body">
-            <div className="pos-row">
-              <div className="pos-fg" style={{ flex: 2, minWidth: 180 }}>
-                <span className="pos-lbl">Supplier</span>
-                <select className="pos-sel" value={supplierId} onChange={(e) => onSupplier(e.target.value)}>
-                  <option value="0">Select Supplier</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+              <p className="pos-save-section-label">Supplier & invoice</p>
+              <div className="pos-save-row pos-save-supplier-row">
+                <div className="pos-fg">
+                  <span className={`pos-lbl ${needSupplier ? 'pos-lbl-warn' : ''}`}>Supplier *</span>
+                  <select
+                    className={`pos-sel ${needSupplier ? 'pos-inp-warn' : ''}`}
+                    value={supplierId}
+                    onChange={(e) => onSupplier(e.target.value)}
+                  >
+                    <option value="0">Select supplier</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="pos-fg">
+                  <span className={`pos-lbl ${needInvoice ? 'pos-lbl-warn' : ''}`}>Invoice No. *</span>
+                  <input
+                    className={`pos-inp ${needInvoice ? 'pos-inp-warn' : ''}`}
+                    value={invoiceNo}
+                    placeholder="Invoice number"
+                    onChange={(e) => setInvoiceNo(e.target.value)}
+                  />
+                </div>
+                <div className="pos-fg">
+                  <span className={`pos-lbl ${needDate ? 'pos-lbl-warn' : ''}`}>Invoice Date *</span>
+                  <input
+                    className={`pos-inp ${needDate ? 'pos-inp-warn' : ''}`}
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="pos-fg" style={{ flex: 1.5, minWidth: 140 }}>
-                <span className="pos-lbl">Invoice No.</span>
-                <input className="pos-inp" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
+
+              <p className="pos-save-section-label">Bill total</p>
+              <div className="pos-save-totals-bar">
+                <div className="pos-save-chip pos-save-chip-qty">
+                  <span>Total Qty</span>
+                  <strong>{qtyText(sums.qty)}</strong>
+                </div>
+                <div className="pos-save-chip">
+                  <span>Cost</span>
+                  <strong>{money(sums.cost)}</strong>
+                </div>
+                <div className="pos-save-chip">
+                  <span>Tax</span>
+                  <strong>{money(sums.tax)}</strong>
+                </div>
+                <div className="pos-save-chip pos-save-chip-edit">
+                  <span>Extra disc</span>
+                  <input
+                    className="pos-inp pos-save-extra-inp"
+                    type="number"
+                    step="0.001"
+                    value={extra}
+                    onChange={(e) => { autoPay.current = true; setExtra(e.target.value); }}
+                  />
+                </div>
+                <div className="pos-save-chip pos-save-chip-pay">
+                  <span>Payable</span>
+                  <strong>₹{money(grand)}</strong>
+                </div>
               </div>
-              <div className="pos-fg" style={{ minWidth: 150 }}>
-                <span className="pos-lbl">Invoice Date</span>
-                <input className="pos-inp" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+
+              <p className="pos-save-section-label">Payment</p>
+              <div className="pos-save-row pos-save-pay-row">
+                <div className="pos-fg">
+                  <span className="pos-lbl pos-lbl-em">Mode *</span>
+                  <select className="pos-sel pos-sel-em" value={mode} onChange={(e) => applyMode(e.target.value)}>
+                    <option value="1">Cash</option>
+                    <option value="2">Bank</option>
+                    <option value="3">Mixed</option>
+                  </select>
+                </div>
+                <div className="pos-fg">
+                  <span className={`pos-lbl pos-lbl-em ${bankMode ? '' : 'pos-lbl-off'}`}>Bank type{bankMode ? ' *' : ''}</span>
+                  <select
+                    className={`pos-sel pos-sel-em ${bankMode ? '' : 'pos-inp-muted'}`}
+                    value={payType}
+                    disabled={!bankMode}
+                    onChange={(e) => setPayType(e.target.value)}
+                  >
+                    <option value="1">UPI</option>
+                    <option value="2">Debit</option>
+                    <option value="3">Credit</option>
+                    <option value="4">NEFT</option>
+                    <option value="5">Wallet</option>
+                  </select>
+                </div>
+                <div className="pos-fg">
+                  <span className="pos-lbl pos-lbl-em">Cash</span>
+                  <input
+                    className={`pos-inp pos-inp-pay ${mode === '2' ? 'pos-inp-muted' : ''}`}
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    value={cashPaid}
+                    disabled={mode === '2'}
+                    onChange={(e) => { autoPay.current = false; setCashPaid(e.target.value); }}
+                  />
+                </div>
+                <div className="pos-fg">
+                  <span className="pos-lbl pos-lbl-em">Bank</span>
+                  <input
+                    className={`pos-inp pos-inp-pay ${mode === '1' ? 'pos-inp-muted' : ''}`}
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    value={bankPaid}
+                    disabled={mode === '1'}
+                    onChange={(e) => { autoPay.current = false; setBankPaid(e.target.value); }}
+                  />
+                </div>
+                <div className={`pos-save-due-chip ${balance > 0.001 ? 'has-due' : paidOver ? 'over-paid' : 'settled'}`}>
+                  <span>Due</span>
+                  <strong>{money(balance)}</strong>
+                </div>
               </div>
+
+              {paidOver && (
+                <p className="pos-save-inline pos-save-inline-error">Paid exceeds payable ({money(grand)}).</p>
+              )}
+              {needSupplier && (
+                <p className="pos-save-inline pos-save-inline-warn">Select a supplier to save this purchase.</p>
+              )}
+              {!needSupplier && needInvoice && (
+                <p className="pos-save-inline pos-save-inline-warn">Enter invoice number.</p>
+              )}
+              {balance > 0.001 && !paidOver && !needSupplier && (
+                <p className="pos-save-inline pos-save-inline-warn">Due {money(balance)} will stay on supplier account.</p>
+              )}
             </div>
-            <div className="pos-grid">
-              <div className="pos-fg">
-                <span className="pos-lbl">Payment Type</span>
-                <select className="pos-sel" value={payType} onChange={(e) => setPayType(e.target.value)}>
-                  <option value="0">Select Payment Type</option>
-                  {payTypes.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+            <div className="pos-save-footer">
+              <div className="pos-save-meta" />
+              <div className="pos-acts pos-acts-end">
+                <button className="pos-btn pos-btn-outline" type="button" disabled={busy} onClick={() => setConfirmOpen(false)}>
+                  Close
+                </button>
+                <button
+                  className="pos-btn pos-save-primary"
+                  type="button"
+                  disabled={busy || paidOver || needSupplier || needInvoice || needDate}
+                  onClick={save}
+                >
+                  {busy ? 'Saving…' : 'Save purchase'}
+                </button>
               </div>
-              <div className="pos-fg">
-                <span className="pos-lbl">Bank / Mode</span>
-                <select className="pos-sel" value={bankId} onChange={(e) => setBankId(e.target.value)} disabled={payType === '1'}>
-                  <option value="0">Select Mode</option>
-                  {banks.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="pos-fg">
-                <span className="pos-lbl">Total Amount</span>
-                <input className="pos-inp" readOnly value={money(grand)} />
-              </div>
-              <div className="pos-fg">
-                <span className="pos-lbl">Paid Now</span>
-                <input className="pos-inp" type="number" step="0.001" value={paid} onChange={(e) => setPaid(e.target.value)} />
-              </div>
-              <div className="pos-fg">
-                <span className="pos-lbl">Extra Discount</span>
-                <input className="pos-inp" type="number" step="0.001" value={extra} onChange={(e) => setExtra(e.target.value)} />
-              </div>
-              <div className="pos-fg">
-                <span className="pos-lbl">Balance</span>
-                <input className="pos-inp" readOnly value={money(balance)} />
-              </div>
-            </div>
-            <div className="pos-acts" style={{ marginTop: 8 }}>
-              <button className="pos-btn" type="button" disabled={busy} onClick={save}>
-                <i className="fas fa-save" /> {busy ? 'SAVING...' : 'SAVE'}
-              </button>
-              <button className="pos-btn pos-btn-outline" type="button" disabled={busy} onClick={() => setConfirmOpen(false)}>
-                Cancel
-              </button>
-            </div>
             </div>
           </div>
         </div>
