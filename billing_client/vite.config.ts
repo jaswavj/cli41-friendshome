@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 
 const publicBase = (raw: string | undefined, fallback: string) => {
   let base = (raw || fallback).trim() || fallback;
+  // Relative base for Tomcat / local folder deploys (e.g. /friendshome/).
+  if (base === '.' || base === './') return './';
   if (!base.startsWith('/')) base = `/${base}`;
   if (base !== '/' && !base.endsWith('/')) base = `${base}/`;
   return base;

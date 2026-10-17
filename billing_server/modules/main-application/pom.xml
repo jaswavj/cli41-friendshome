@@ -61,7 +61,7 @@
     </dependencies>
 
     <build>
-        <finalName>billing-server</finalName>
+        <finalName>friendshome-server</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
