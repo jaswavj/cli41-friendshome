@@ -96,6 +96,7 @@ export const billingMenuConfig: MenuItemConfig[] = [
     moduleId: MENU_MODULE.stockReports,
     submenus: [
       { id: 'current-stock', name: 'Current Stock', url: routerPathNames.stockReports.currentStock, icon: 'fas fa-boxes' },
+      { id: 'zero-stock', name: 'Zero Stock Report', url: routerPathNames.stockReports.zeroStock, icon: 'fas fa-box-open' },
       { id: 'product-transaction', name: 'Product Transaction', url: routerPathNames.stockReports.productTransaction, icon: 'fas fa-exchange-alt' },
       { id: 'stock-adjustment', name: 'Stock Adjustment', url: routerPathNames.stockReports.stockAdjustment, icon: 'fas fa-sliders-h' },
     ],

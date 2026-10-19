@@ -534,7 +534,7 @@ public class BillingReadService {
             bill.setReturned(bill.getItems().stream().anyMatch(l -> l.getIsExchanged() != null && l.getIsExchanged() == 2));
         }
         attachPayments(bill);
-        bill.setDocTitle("Tax Invoice");
+        bill.setDocTitle(bill.getIsTaxBill() != null && bill.getIsTaxBill() == 1 ? "TAX INVOICE" : "");
         bill.setDocNoLabel("Invoice No.");
         return bill;
     }

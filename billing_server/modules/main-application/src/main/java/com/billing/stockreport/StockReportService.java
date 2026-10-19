@@ -28,13 +28,25 @@ public class StockReportService {
     }
 
     public List<Map<String, Object>> currentStock() {
+        return stockRows(false);
+    }
+
+    public List<Map<String, Object>> zeroStock() {
+        return stockRows(true);
+    }
+
+    private List<Map<String, Object>> stockRows(boolean zeroOnly) {
+        String stockFilter = zeroOnly ? "IFNULL(a.stock, 0) <= 0" : "a.stock > 0";
+        String from = zeroOnly
+                ? "FROM prod_product b LEFT JOIN prod_batch a ON b.id = a.product_id "
+                : "FROM prod_batch a JOIN prod_product b ON b.id = a.product_id ";
         return jdbcTemplate.query(
-                "SELECT b.name, b.code, a.stock, a.cost, a.mrp, "
-                        + "CASE WHEN disc_type = 1 THEN discount WHEN disc_type = 2 THEN ROUND(mrp * (discount/100), 2) ELSE 0 END AS discount_rs, "
+                "SELECT b.name, b.code, IFNULL(a.stock, 0) AS stock, IFNULL(a.cost, 0) AS cost, IFNULL(a.mrp, 0) AS mrp, "
+                        + "CASE WHEN disc_type = 1 THEN discount WHEN disc_type = 2 THEN ROUND(IFNULL(a.mrp, 0) * (discount/100), 2) ELSE 0 END AS discount_rs, "
                         + "IFNULL(u.name,'') AS unit_name, b.category_id, IFNULL(c.name,'') AS category_name, IFNULL(u.convertion_unit,'') AS convertion_unit "
-                        + "FROM prod_batch a JOIN prod_product b ON b.id = a.product_id "
+                        + from
                         + "LEFT JOIN prod_units u ON u.id = b.unit_id LEFT JOIN prod_category c ON c.id = b.category_id "
-                        + "WHERE a.stock > 0 AND IFNULL(b.is_active, 0) = 1 ORDER BY CAST(SUBSTRING(b.code, 2) AS UNSIGNED)",
+                        + "WHERE " + stockFilter + " AND IFNULL(b.is_active, 0) = 1 ORDER BY CAST(SUBSTRING(b.code, 2) AS UNSIGNED)",
                 (rs, i) -> {
                     double stock = rs.getDouble("stock");
                     double cost = rs.getDouble("cost");
