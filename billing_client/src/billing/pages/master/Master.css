@@ -307,8 +307,27 @@
   table-layout: auto;
 }
 
-.mst-table-wrap:has(.mst-table-wide) {
+.mst-table-wrap:has(.mst-table-wide),
+.mst-table-wrap:has(.mst-table-show) {
   overflow-x: auto;
+}
+
+.mst-table-show {
+  table-layout: auto;
+  min-width: 980px;
+}
+
+.mst-table-show th,
+.mst-table-show td {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+.mst-table-show td.num {
+  white-space: nowrap;
 }
 
 .mst-table .mst-inp,
@@ -399,6 +418,19 @@
 .mst-note {
   font-size: 0.75rem;
   color: var(--color-text-muted);
+}
+
+.el-full-details {
+  min-height: 34px;
+  padding: 10px 12px;
+  border: 1.5px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-radius: 6px;
+  background: var(--color-bg-page);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .mst-grid-barcode {
@@ -533,7 +565,8 @@
   }
 
   .mst-table,
-  .mst-table-wide {
+  .mst-table-wide,
+  .mst-table-show {
     width: max-content;
     min-width: 100%;
     table-layout: auto;
@@ -544,6 +577,11 @@
     overflow: visible;
     text-overflow: unset;
     white-space: nowrap;
+  }
+
+  .mst-table-show th,
+  .mst-table-show td {
+    white-space: normal;
   }
 
   .mst-table.mst-mobile-cards {

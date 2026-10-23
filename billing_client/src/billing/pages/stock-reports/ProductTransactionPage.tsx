@@ -1,33 +1,80 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { toast } from 'react-toastify';
-import { stockApi, stockData, stockError, stockPage } from '../../../api/stock-reports/stock-report-api-service';
+import { billingApi } from '../../../api/billing/billing-api-service';
+import { stockApi, stockError, stockPage } from '../../../api/stock-reports/stock-report-api-service';
 import ListPagination, { DEFAULT_PAGE_SIZE } from '../../components/ListPagination';
+import '../credit/Credit.css';
 import '../master/Master.css';
 import '../statistics/Stats.css';
 import ReportActions from '../account-reports/ReportActions';
 
-type Prod = { id: number; name: string };
 type Row = { productName: string; stockIn: number; stockOut: number; stockNow: number; notes: string; dateTime: string; userName: string; adjType: number; unit: string };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const productNames = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => (typeof item === 'string' ? item : item?.name || item?.productName || ''))
+    .filter((name): name is string => Boolean(name));
+};
+
 const ProductTransactionPage: React.FC = () => {
   const [from, setFrom] = useState(today());
   const [to, setTo] = useState(today());
-  const [productId, setProductId] = useState('0');
-  const [products, setProducts] = useState<Prod[]>([]);
+  const [term, setTerm] = useState('');
+  const [hits, setHits] = useState<string[]>([]);
+  const [productId, setProductId] = useState<number | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const timer = useRef<number | null>(null);
 
-  useEffect(() => {
-    stockApi.products().then((res) => setProducts(stockData<Prod[]>(res) || [])).catch(() => undefined);
-  }, []);
+  const searchProd = (q: string) => {
+    setTerm(q);
+    setProductId(null);
+    if (timer.current) window.clearTimeout(timer.current);
+    if (!q.trim()) {
+      setHits([]);
+      return;
+    }
+    timer.current = window.setTimeout(async () => {
+      try {
+        const res: any = await billingApi.searchProducts(q.trim());
+        setHits(productNames(res?.data));
+      } catch {
+        setHits([]);
+      }
+    }, 250);
+  };
+
+  const selectProd = async (name: string) => {
+    setTerm(name);
+    setHits([]);
+    try {
+      const res: any = await billingApi.productByName(name);
+      const p = res?.data;
+      if (!p?.id) {
+        toast.warning('Product not found.');
+        setProductId(null);
+        return;
+      }
+      setProductId(Number(p.id));
+      setTerm(p.name || name);
+    } catch {
+      setProductId(null);
+      toast.error('Could not load product');
+    }
+  };
 
   const search = async (p = 0) => {
+    if (term.trim() && !productId) {
+      toast.warning('Select a product from the list, or clear the field for all products.');
+      return;
+    }
     try {
       const pg = stockPage<Row>(await stockApi.transactions(
-        from, to, productId === '0' ? undefined : Number(productId), p, DEFAULT_PAGE_SIZE,
+        from, to, productId || undefined, p, DEFAULT_PAGE_SIZE,
       ));
       setRows(pg.items);
       setTotal(pg.total);
@@ -44,12 +91,28 @@ const ProductTransactionPage: React.FC = () => {
         <div className="mst-card-b mst-form">
           <div className="mst-fg"><label>From Date</label><input className="mst-inp" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
           <div className="mst-fg"><label>To Date</label><input className="mst-inp" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-          <div className="mst-fg">
+          <div className="mst-fg crd-search-wrap">
             <label>Product</label>
-            <select className="mst-sel" value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="0">-- All Products --</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <input
+              className="mst-inp"
+              value={term}
+              placeholder="Type name or code… (blank = all)"
+              onChange={(e) => searchProd(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setHits([]);
+                if (e.key === 'Enter' && hits[0]) {
+                  e.preventDefault();
+                  void selectProd(hits[0]);
+                }
+              }}
+            />
+            {hits.length > 0 && (
+              <ul className="crd-dropdown">
+                {hits.map((name) => (
+                  <li key={name} onClick={() => { void selectProd(name); }}>{name}</li>
+                ))}
+              </ul>
+            )}
           </div>
           <div className="mst-actions">
             <button className="mst-btn mst-btn-primary" type="button" onClick={() => search(0)}>Generate Report</button>
@@ -74,7 +137,7 @@ const ProductTransactionPage: React.FC = () => {
         <div className="mst-card">
           <div className="mst-card-h">Period: {from} to {to}</div>
           <div className="mst-table-wrap">
-            <table className="mst-table">
+            <table className="mst-table mst-table-show">
               <thead>
                 <tr>
                   <th>#</th><th>Product</th><th className="num">Stock in</th><th className="num">Stock out</th>
@@ -91,7 +154,7 @@ const ProductTransactionPage: React.FC = () => {
                     <td className={`num ${row.stockOut > 0 ? 'st-out' : ''}`}>{row.stockOut} {row.unit}</td>
                     <td className="num">{row.stockNow} {row.unit}</td>
                     <td>{row.notes}</td>
-                    <td>{row.dateTime}</td>
+                    <td>{String(row.dateTime || '').replace('/', ' ')}</td>
                     <td>{row.adjType === 1 ? 'Added' : row.adjType === 2 ? 'Removed' : '—'}</td>
                     <td>{row.userName}</td>
                   </tr>

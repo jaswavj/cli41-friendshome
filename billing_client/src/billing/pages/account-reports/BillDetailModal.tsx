@@ -11,7 +11,7 @@ type Line = {
   isExchanged?: number;
 };
 type Pay = { date: string; mode: string; method: string; paid: number; balance: number };
-type Bill = {
+export type BillDetail = {
   billDisplay: string; customerName?: string; customerPhone?: string; customerAddress?: string; customerGstin?: string;
   date: string; time: string; priceTotal: number; productDiscount: number; extraDiscount: number;
   exchangePointUsed?: number;
@@ -21,17 +21,91 @@ type Bill = {
 };
 
 const lineStatus = (v?: number) => (v === 1 ? 'Exchanged' : v === 2 ? 'Returned' : 'Sale');
-const billStatus = (bill: Bill) => {
+const billStatus = (bill: BillDetail) => {
   if (bill.exchanged && bill.returned) return 'Exchanged / Returned';
   if (bill.exchanged) return 'Exchanged';
   if (bill.returned) return 'Returned';
   return 'No Exchange';
 };
 
+export const BillDetailView: React.FC<{ bill: BillDetail }> = ({ bill }) => (
+  <>
+    <div className="mst-form" style={{ marginBottom: 12 }}>
+      <div className="mst-fg"><label>Customer</label><input className="mst-inp" readOnly value={bill.customerName || '-'} /></div>
+      <div className="mst-fg"><label>Phone</label><input className="mst-inp" readOnly value={bill.customerPhone || '-'} /></div>
+      <div className="mst-fg"><label>Date</label><input className="mst-inp" readOnly value={`${bill.date || ''} ${bill.time || ''}`.trim()} /></div>
+      <div className="mst-fg"><label>GSTIN</label><input className="mst-inp" readOnly value={bill.customerGstin || '-'} /></div>
+      <div className="mst-fg"><label>Exchange</label><input className="mst-inp" readOnly value={billStatus(bill)} /></div>
+      {bill.customerAddress ? (
+        <div className="mst-fg span-2"><label>Address</label><input className="mst-inp" readOnly value={bill.customerAddress} /></div>
+      ) : null}
+    </div>
+    <div className="mst-table-wrap" style={{ maxHeight: '36vh' }}>
+      <table className="mst-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Product</th><th>HSN</th><th>Unit</th><th>Status</th>
+            <th className="num">Qty</th><th className="num">Price</th><th className="num">Disc</th>
+            <th className="num">GST%</th><th className="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(bill.items || []).length === 0 && <tr><td colSpan={10} className="mst-empty">No line items.</td></tr>}
+          {(bill.items || []).map((line, i) => (
+            <tr key={`${line.name}-${i}`}>
+              <td>{i + 1}</td>
+              <td>{line.name}{line.code ? <div className="mst-note">{line.code}</div> : null}</td>
+              <td>{line.hsn || '-'}</td>
+              <td>{line.unitName || '-'}</td>
+              <td>{lineStatus(line.isExchanged)}</td>
+              <td className="num">{n2(line.qty)}</td>
+              <td className="num">{n2(line.price)}</td>
+              <td className="num">{n2(line.discount)}</td>
+              <td className="num">{n2(line.gst)}</td>
+              <td className="num">{n2(line.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <div className="mst-form" style={{ marginTop: 12, gridTemplateColumns: '1fr 1fr 1fr' }}>
+      <div className="mst-fg"><label>Total</label><input className="mst-inp" readOnly value={n2(bill.priceTotal)} /></div>
+      <div className="mst-fg"><label>Product Disc</label><input className="mst-inp" readOnly value={n2(bill.productDiscount)} /></div>
+      <div className="mst-fg"><label>Extra Disc</label><input className="mst-inp" readOnly value={n2(bill.extraDiscount)} /></div>
+      <div className="mst-fg"><label>Exch. Point</label><input className="mst-inp" readOnly value={n2(bill.exchangePointUsed)} /></div>
+      <div className="mst-fg"><label>Payable</label><input className="mst-inp" readOnly value={n2(bill.payable)} /></div>
+      <div className="mst-fg"><label>Paid</label><input className="mst-inp" readOnly value={n2(bill.paid)} /></div>
+      <div className="mst-fg"><label>Balance</label><input className="mst-inp" readOnly value={n2(bill.balance)} /></div>
+      <div className="mst-fg"><label>Cash</label><input className="mst-inp" readOnly value={n2(bill.cashPaid)} /></div>
+      <div className="mst-fg"><label>Bank</label><input className="mst-inp" readOnly value={n2(bill.bankPaid)} /></div>
+    </div>
+    {(bill.payments || []).length > 0 && (
+      <div className="mst-table-wrap" style={{ maxHeight: '22vh', marginTop: 12 }}>
+        <table className="mst-table">
+          <thead>
+            <tr><th>Date</th><th>Mode</th><th>Method</th><th className="num">Paid</th><th className="num">Balance</th></tr>
+          </thead>
+          <tbody>
+            {bill.payments.map((p, i) => (
+              <tr key={`${p.date}-${i}`}>
+                <td>{p.date}</td>
+                <td>{p.mode}</td>
+                <td>{p.method}</td>
+                <td className="num">{n2(p.paid)}</td>
+                <td className="num">{n2(p.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </>
+);
+
 type Props = { billNo: string; onClose: () => void };
 
 const BillDetailModal: React.FC<Props> = ({ billNo, onClose }) => {
-  const [bill, setBill] = useState<Bill | null>(null);
+  const [bill, setBill] = useState<BillDetail | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -60,77 +134,7 @@ const BillDetailModal: React.FC<Props> = ({ billNo, onClose }) => {
         {!bill ? (
           <div className="mst-empty">Loading bill…</div>
         ) : (
-          <>
-            <div className="mst-form" style={{ marginBottom: 12 }}>
-              <div className="mst-fg"><label>Customer</label><input className="mst-inp" readOnly value={bill.customerName || '-'} /></div>
-              <div className="mst-fg"><label>Phone</label><input className="mst-inp" readOnly value={bill.customerPhone || '-'} /></div>
-              <div className="mst-fg"><label>Date</label><input className="mst-inp" readOnly value={`${bill.date || ''} ${bill.time || ''}`.trim()} /></div>
-              <div className="mst-fg"><label>GSTIN</label><input className="mst-inp" readOnly value={bill.customerGstin || '-'} /></div>
-              <div className="mst-fg"><label>Exchange</label><input className="mst-inp" readOnly value={billStatus(bill)} /></div>
-              {bill.customerAddress ? (
-                <div className="mst-fg span-2"><label>Address</label><input className="mst-inp" readOnly value={bill.customerAddress} /></div>
-              ) : null}
-            </div>
-            <div className="mst-table-wrap" style={{ maxHeight: '36vh' }}>
-              <table className="mst-table">
-                <thead>
-                  <tr>
-                    <th>#</th><th>Product</th><th>HSN</th><th>Unit</th><th>Status</th>
-                    <th className="num">Qty</th><th className="num">Price</th><th className="num">Disc</th>
-                    <th className="num">GST%</th><th className="num">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(bill.items || []).length === 0 && <tr><td colSpan={10} className="mst-empty">No line items.</td></tr>}
-                  {(bill.items || []).map((line, i) => (
-                    <tr key={`${line.name}-${i}`}>
-                      <td>{i + 1}</td>
-                      <td>{line.name}{line.code ? <div className="mst-note">{line.code}</div> : null}</td>
-                      <td>{line.hsn || '-'}</td>
-                      <td>{line.unitName || '-'}</td>
-                      <td>{lineStatus(line.isExchanged)}</td>
-                      <td className="num">{n2(line.qty)}</td>
-                      <td className="num">{n2(line.price)}</td>
-                      <td className="num">{n2(line.discount)}</td>
-                      <td className="num">{n2(line.gst)}</td>
-                      <td className="num">{n2(line.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mst-form" style={{ marginTop: 12, gridTemplateColumns: '1fr 1fr 1fr' }}>
-              <div className="mst-fg"><label>Total</label><input className="mst-inp" readOnly value={n2(bill.priceTotal)} /></div>
-              <div className="mst-fg"><label>Product Disc</label><input className="mst-inp" readOnly value={n2(bill.productDiscount)} /></div>
-              <div className="mst-fg"><label>Extra Disc</label><input className="mst-inp" readOnly value={n2(bill.extraDiscount)} /></div>
-              <div className="mst-fg"><label>Exch. Point</label><input className="mst-inp" readOnly value={n2(bill.exchangePointUsed)} /></div>
-              <div className="mst-fg"><label>Payable</label><input className="mst-inp" readOnly value={n2(bill.payable)} /></div>
-              <div className="mst-fg"><label>Paid</label><input className="mst-inp" readOnly value={n2(bill.paid)} /></div>
-              <div className="mst-fg"><label>Balance</label><input className="mst-inp" readOnly value={n2(bill.balance)} /></div>
-              <div className="mst-fg"><label>Cash</label><input className="mst-inp" readOnly value={n2(bill.cashPaid)} /></div>
-              <div className="mst-fg"><label>Bank</label><input className="mst-inp" readOnly value={n2(bill.bankPaid)} /></div>
-            </div>
-            {(bill.payments || []).length > 0 && (
-              <div className="mst-table-wrap" style={{ maxHeight: '22vh', marginTop: 12 }}>
-                <table className="mst-table">
-                  <thead>
-                    <tr><th>Date</th><th>Mode</th><th>Method</th><th className="num">Paid</th><th className="num">Balance</th></tr>
-                  </thead>
-                  <tbody>
-                    {bill.payments.map((p, i) => (
-                      <tr key={`${p.date}-${i}`}>
-                        <td>{p.date}</td>
-                        <td>{p.mode}</td>
-                        <td>{p.method}</td>
-                        <td className="num">{n2(p.paid)}</td>
-                        <td className="num">{n2(p.balance)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+          <BillDetailView bill={bill} />
         )}
       </div>
     </div>

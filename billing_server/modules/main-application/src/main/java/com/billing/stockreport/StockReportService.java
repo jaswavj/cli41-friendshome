@@ -27,12 +27,39 @@ public class StockReportService {
         );
     }
 
-    public List<Map<String, Object>> currentStock() {
-        return stockRows(false);
+    public List<Map<String, Object>> currentStock(String q, Long categoryId) {
+        return filterStock(stockRows(false), q, categoryId);
     }
 
     public List<Map<String, Object>> zeroStock() {
         return stockRows(true);
+    }
+
+    private List<Map<String, Object>> filterStock(List<Map<String, Object>> rows, String q, Long categoryId) {
+        String needle = q == null ? "" : q.trim().toLowerCase();
+        boolean filterCat = categoryId != null && categoryId > 0;
+        if (needle.isEmpty() && !filterCat) {
+            return rows;
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            if (filterCat) {
+                Object id = row.get("categoryId");
+                long cid = id instanceof Number n ? n.longValue() : 0L;
+                if (cid != categoryId) {
+                    continue;
+                }
+            }
+            if (!needle.isEmpty()) {
+                String name = String.valueOf(row.getOrDefault("productName", "")).toLowerCase();
+                String code = String.valueOf(row.getOrDefault("code", "")).toLowerCase();
+                if (!name.contains(needle) && !code.contains(needle)) {
+                    continue;
+                }
+            }
+            out.add(row);
+        }
+        return out;
     }
 
     private List<Map<String, Object>> stockRows(boolean zeroOnly) {

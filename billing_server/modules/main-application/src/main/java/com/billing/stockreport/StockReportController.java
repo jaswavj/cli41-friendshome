@@ -22,8 +22,10 @@ public class StockReportController {
 
     @GetMapping("/current-stock")
     public ResponseDO currentStock(@RequestParam(defaultValue = "0") int page,
-                                   @RequestParam(defaultValue = "25") int size) {
-        return ok(JdbcPageHelper.slice(stockReportService.currentStock(), page, size));
+                                   @RequestParam(defaultValue = "25") int size,
+                                   @RequestParam(required = false) String q,
+                                   @RequestParam(required = false) Long categoryId) {
+        return ok(JdbcPageHelper.slice(stockReportService.currentStock(q, categoryId), page, size));
     }
 
     @GetMapping("/zero-stock")
