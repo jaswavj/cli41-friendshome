@@ -10,12 +10,12 @@ import ReportActions from './ReportActions';
 
 type User = { id: number; name: string };
 type Bill = {
-  billNo: string; customer: string; total: number; payable: number; paid: number;
+  billNo: string; customer: string; phone?: string; total: number; payable: number; paid: number;
   cash: number; bank: number; balance: number; pendingBalance: number;
   exchPoint?: number; date: string; time: string; biller: string;
 };
 type Due = {
-  customer: string; balance: number; cashPaid: number; bankPaid: number; mode: string;
+  customer: string; phone?: string; balance: number; cashPaid: number; bankPaid: number; mode: string;
   bankOption: string; date: string; time: string; biller: string;
 };
 
@@ -33,13 +33,15 @@ const SalesReportPage: React.FC = () => {
   const [dueTotal, setDueTotal] = useState(0);
   const [billPage, setBillPage] = useState(0);
   const [duePage, setDuePage] = useState(0);
+  const [q, setQ] = useState('');
+  const [searchQ, setSearchQ] = useState('');
   const { openBill, billModal } = useBillDetail();
 
   useEffect(() => {
     adminApi.users().then((res) => setUsers(adminData<User[]>(res) || [])).catch(() => undefined);
   }, []);
 
-  const fetchSales = async (billP: number, dueP: number, resetDues = false) => {
+  const fetchSales = async (billP: number, dueP: number, resetDues = false, find = searchQ) => {
     const modeN = Number(mode);
     const typeN = Number(type);
     const userN = Number(userId);
@@ -47,7 +49,7 @@ const SalesReportPage: React.FC = () => {
     try {
       if (resetDues) {
         const data = accountData<{ bills: Bill[] | ReturnType<typeof normalizePage<Bill>>; dues: Due[] | ReturnType<typeof normalizePage<Due>> }>(
-          await accountApi.sales(from, to, modeN, typeN, userN, taxN, 0, DEFAULT_PAGE_SIZE),
+          await accountApi.sales(from, to, modeN, typeN, userN, taxN, 0, DEFAULT_PAGE_SIZE, find),
         );
         const billsPg = normalizePage(data.bills);
         const duesPg = normalizePage(data.dues);
@@ -60,8 +62,8 @@ const SalesReportPage: React.FC = () => {
         return;
       }
       const [billRes, dueRes] = await Promise.all([
-        accountApi.sales(from, to, modeN, typeN, userN, taxN, billP, DEFAULT_PAGE_SIZE),
-        accountApi.sales(from, to, modeN, typeN, userN, taxN, dueP, DEFAULT_PAGE_SIZE),
+        accountApi.sales(from, to, modeN, typeN, userN, taxN, billP, DEFAULT_PAGE_SIZE, find),
+        accountApi.sales(from, to, modeN, typeN, userN, taxN, dueP, DEFAULT_PAGE_SIZE, find),
       ]);
       const billData = accountData<{ bills: Bill[] | ReturnType<typeof normalizePage<Bill>>; dues: Due[] | ReturnType<typeof normalizePage<Due>> }>(billRes);
       const dueData = accountData<{ bills: Bill[] | ReturnType<typeof normalizePage<Bill>>; dues: Due[] | ReturnType<typeof normalizePage<Due>> }>(dueRes);
@@ -78,7 +80,16 @@ const SalesReportPage: React.FC = () => {
     }
   };
 
-  const search = () => fetchSales(0, 0, true);
+  const search = () => {
+    setQ('');
+    setSearchQ('');
+    fetchSales(0, 0, true, '');
+  };
+  const applyFind = () => {
+    const next = q.trim();
+    setSearchQ(next);
+    fetchSales(0, 0, true, next);
+  };
   const loadBills = (p: number) => fetchSales(p, duePage, false);
   const loadDues = (p: number) => fetchSales(billPage, p, false);
 
@@ -135,7 +146,7 @@ const SalesReportPage: React.FC = () => {
                 {
                   name: 'Sales',
                   columns: [
-                    { key: 'billNo', label: 'Bill No' }, { key: 'customer', label: 'Customer' },
+                    { key: 'billNo', label: 'Bill No' }, { key: 'customer', label: 'Customer' }, { key: 'phone', label: 'Phone' },
                     { key: 'total', label: 'Total', num: true }, { key: 'exchPoint', label: 'Exch. Point', num: true },
                     { key: 'payable', label: 'Payable', num: true },
                     { key: 'paid', label: 'Paid', num: true }, { key: 'cash', label: 'Cash', num: true },
@@ -148,7 +159,7 @@ const SalesReportPage: React.FC = () => {
                 {
                   name: 'Due Collection',
                   columns: [
-                    { key: 'customer', label: 'Customer' }, { key: 'balance', label: 'Balance', num: true },
+                    { key: 'customer', label: 'Customer' }, { key: 'phone', label: 'Phone' }, { key: 'balance', label: 'Balance', num: true },
                     { key: 'cashPaid', label: 'Cash Paid', num: true }, { key: 'bankPaid', label: 'Bank Paid', num: true },
                     { key: 'mode', label: 'Mode' }, { key: 'bankOption', label: 'Bank Option' },
                     { key: 'date', label: 'Date' }, { key: 'time', label: 'Time' }, { key: 'biller', label: 'Biller' },
@@ -163,24 +174,38 @@ const SalesReportPage: React.FC = () => {
       {bills && (
         <>
           <div className="mst-card" style={{ marginBottom: 12 }}>
-            <div className="mst-card-h">Sales {from} — {to}</div>
+            <div className="mst-card-h">
+              <span>Sales {from} — {to}</span>
+              <div className="mst-search">
+                <i className="fas fa-search" />
+                <input
+                  className="mst-inp"
+                  placeholder="Search name or phone..."
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && applyFind()}
+                />
+                <button className="mst-btn mst-btn-primary" type="button" onClick={applyFind}>Search</button>
+              </div>
+            </div>
             <div className="mst-table-wrap">
-              <table className="mst-table">
+              <table className="mst-table mst-table-show">
                 <thead>
                   <tr>
-                    <th>#</th><th>Bill No</th><th>Customer</th><th className="num">Total</th><th className="num">Exch. Point</th><th className="num">Payable</th><th className="num">Paid</th>
+                    <th>#</th><th>Bill No</th><th>Customer</th><th>Phone</th><th className="num">Total</th><th className="num">Exch. Point</th><th className="num">Payable</th><th className="num">Paid</th>
                     {showCash && <th className="num">Cash</th>}
                     {showBank && <th className="num">Bank</th>}
                     <th className="num">Balance</th><th className="num">Pending</th><th>Date</th><th>Time</th><th>Biller</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {bills.length === 0 && <tr><td colSpan={13} className="mst-empty">No sales found.</td></tr>}
+                  {bills.length === 0 && <tr><td colSpan={15} className="mst-empty">No sales found.</td></tr>}
                   {bills.map((row, i) => (
                     <tr key={`${row.billNo}-${i}`} className="mst-click-row" onClick={() => openBill(row.billNo)}>
                       <td>{billPage * DEFAULT_PAGE_SIZE + i + 1}</td>
                       <td>{row.billNo}</td>
                       <td>{row.customer}</td>
+                      <td>{row.phone || '-'}</td>
                       <td className="num">{n3(row.total)}</td>
                       <td className="num">{n3(row.exchPoint)}</td>
                       <td className="num">{n3(row.payable)}</td>
@@ -196,7 +221,7 @@ const SalesReportPage: React.FC = () => {
                   ))}
                   {bills.length > 0 && (
                     <tr>
-                      <td colSpan={3}><strong>Page total</strong></td>
+                      <td colSpan={4}><strong>Page total</strong></td>
                       <td className="num"><strong>{n3(sum(bills, 'total'))}</strong></td>
                       <td className="num"><strong>{n3(sum(bills, 'exchPoint'))}</strong></td>
                       <td className="num"><strong>{n3(sum(bills, 'payable'))}</strong></td>
@@ -216,19 +241,20 @@ const SalesReportPage: React.FC = () => {
           <div className="mst-card">
             <div className="mst-card-h">Due Collection {from} — {to}</div>
             <div className="mst-table-wrap">
-              <table className="mst-table">
+              <table className="mst-table mst-table-show">
                 <thead>
                   <tr>
-                    <th>#</th><th>Customer</th><th className="num">Balance</th><th className="num">Cash Paid</th>
+                    <th>#</th><th>Customer</th><th>Phone</th><th className="num">Balance</th><th className="num">Cash Paid</th>
                     <th className="num">Bank Paid</th><th>Mode</th><th>Bank Option</th><th>Date</th><th>Time</th><th>Biller</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dues.length === 0 && <tr><td colSpan={10} className="mst-empty">No due collections.</td></tr>}
+                  {dues.length === 0 && <tr><td colSpan={11} className="mst-empty">No due collections.</td></tr>}
                   {dues.map((row, i) => (
                     <tr key={`${row.customer}-${i}`}>
                       <td>{duePage * DEFAULT_PAGE_SIZE + i + 1}</td>
                       <td>{row.customer}</td>
+                      <td>{row.phone || '-'}</td>
                       <td className="num">{n3(row.balance)}</td>
                       <td className="num">{n3(row.cashPaid)}</td>
                       <td className="num">{n3(row.bankPaid)}</td>
@@ -241,7 +267,7 @@ const SalesReportPage: React.FC = () => {
                   ))}
                   {dues.length > 0 && (
                     <tr>
-                      <td colSpan={3}><strong>Page total</strong></td>
+                      <td colSpan={4}><strong>Page total</strong></td>
                       <td className="num"><strong>{n3(sum(dues, 'cashPaid'))}</strong></td>
                       <td className="num"><strong>{n3(sum(dues, 'bankPaid'))}</strong></td>
                       <td colSpan={5} />

@@ -29,7 +29,7 @@ public class AccountReportService {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public Map<String, Object> sales(String from, String to, Integer mode, Integer type, Long userId, Integer taxBill) {
+    public Map<String, Object> sales(String from, String to, Integer mode, Integer type, Long userId, Integer taxBill, String q) {
         String fromDate = required(from, "From date is required");
         String toDate = required(to, "To date is required");
         int modeId = mode == null ? 0 : mode;
@@ -67,6 +67,13 @@ public class AccountReportService {
         } else if (tax == 2) {
             sql += "AND IFNULL(a.is_tax_bill, 0) = 0 ";
         }
+        String term = q == null ? "" : q.trim();
+        if (!term.isEmpty()) {
+            sql += "AND (IFNULL(a.cusName,'') LIKE ? OR IFNULL(a.cusPhn,'') LIKE ?) ";
+            String like = "%" + term + "%";
+            args.add(like);
+            args.add(like);
+        }
         sql += "GROUP BY a.id, a.bill_display, a.total, a.prodDisc, a.extraDisc, a.exchPoint, a.payable, a.paid, a.date, a.time, "
                 + "b.user_name, a.balance, a.currentBalance, a.cusName, a.cusPhn, a.paymentMode";
 
@@ -92,7 +99,7 @@ public class AccountReportService {
             return row;
         }, args.toArray());
 
-        String dueSql = "SELECT c.name, a.balance, a.cash_paid, a.bank_paid, "
+        String dueSql = "SELECT c.name, IFNULL(c.phone_number,'') AS phone, a.balance, a.cash_paid, a.bank_paid, "
                 + "CASE WHEN a.pay_mode = 1 THEN 'Cash' ELSE 'Bank' END AS mode, "
                 + "CASE WHEN a.pay_type = 0 THEN '-' WHEN a.pay_type = 1 THEN 'UPI' WHEN a.pay_type = 2 THEN 'DEBIT CARD' "
                 + "WHEN a.pay_type = 3 THEN 'CREDIT CARD' WHEN a.pay_type = 4 THEN 'NEFT' WHEN a.pay_type = 5 THEN 'WALLET' END AS bank, "
@@ -106,10 +113,17 @@ public class AccountReportService {
             dueSql += "AND a.uid = ? ";
             dueArgs.add(uid);
         }
+        if (!term.isEmpty()) {
+            dueSql += "AND (IFNULL(c.name,'') LIKE ? OR IFNULL(c.phone_number,'') LIKE ?) ";
+            String like = "%" + term + "%";
+            dueArgs.add(like);
+            dueArgs.add(like);
+        }
         dueSql += "ORDER BY a.date, a.time";
         List<Map<String, Object>> dues = jdbcTemplate.query(dueSql, (rs, i) -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("customer", nz(rs.getString("name")));
+            row.put("phone", nz(rs.getString("phone")));
             row.put("balance", rs.getDouble("balance"));
             row.put("cashPaid", rs.getDouble("cash_paid"));
             row.put("bankPaid", rs.getDouble("bank_paid"));

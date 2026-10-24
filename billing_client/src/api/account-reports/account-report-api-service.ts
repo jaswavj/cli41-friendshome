@@ -6,10 +6,11 @@ const withPage = (base: string, page = 0, size = 25) => `${base}${base.includes(
 export class AccountReportApiService {
   private http = new HttpClientWrapper();
 
-  sales = (from: string, to: string, mode = 0, type = 0, userId = 0, taxBill = 0, page = 0, size = 25) => {
+  sales = (from: string, to: string, mode = 0, type = 0, userId = 0, taxBill = 0, page = 0, size = 25, q = '') => {
     const params = new URLSearchParams({ from, to, mode: String(mode), type: String(type) });
     if (userId) params.set('userId', String(userId));
     if (taxBill) params.set('taxBill', String(taxBill));
+    if (q.trim()) params.set('q', q.trim());
     params.set('page', String(page));
     params.set('size', String(size));
     return this.http.get(`/v1/account-reports/sales?${params}`);

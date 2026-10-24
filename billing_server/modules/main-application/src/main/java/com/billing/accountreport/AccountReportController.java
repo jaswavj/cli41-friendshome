@@ -26,9 +26,10 @@ public class AccountReportController {
                             @RequestParam(required = false, defaultValue = "0") Integer type,
                             @RequestParam(required = false, defaultValue = "0") Long userId,
                             @RequestParam(required = false, defaultValue = "0") Integer taxBill,
+                            @RequestParam(required = false, defaultValue = "") String q,
                             @RequestParam(defaultValue = "0") int page,
                             @RequestParam(defaultValue = "25") int size) {
-        var data = accountReportService.sales(from, to, mode, type, userId, taxBill);
+        var data = accountReportService.sales(from, to, mode, type, userId, taxBill, q);
         data.put("bills", JdbcPageHelper.slice((java.util.List<?>) data.get("bills"), page, size));
         data.put("dues", JdbcPageHelper.slice((java.util.List<?>) data.get("dues"), page, size));
         return ok(data);
