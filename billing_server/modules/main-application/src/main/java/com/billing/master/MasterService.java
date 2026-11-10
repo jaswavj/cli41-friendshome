@@ -240,10 +240,11 @@ public class MasterService {
     @Transactional
     public void saveCustomer(CustomerSaveRequest request) {
         String name = requiredName(request.getName(), "Customer name is required");
-        if (customerNameExists(name, request.getId())) {
-            throw new RuntimeException("Customer name already exists");
+        String rawPhone = nz(request.getPhone());
+        final String phone = "-".equals(rawPhone) ? "" : rawPhone;
+        if (customerNamePhoneExists(name, phone, request.getId())) {
+            throw new RuntimeException("Customer with this name and phone number already exists");
         }
-        String phone = nz(request.getPhone());
         String address = nz(request.getAddress());
         String gstin = nz(request.getGstin());
         int isGst = request.getIsGst() == null ? 0 : request.getIsGst();
@@ -777,10 +778,12 @@ public class MasterService {
         return !ids.isEmpty();
     }
 
-    private boolean customerNameExists(String name, Long excludeId) {
+    private boolean customerNamePhoneExists(String name, String phone, Long excludeId) {
+        String normalizedPhone = phone == null || phone.isBlank() || "-".equals(phone.trim()) ? "" : phone.trim();
+        String sql = "SELECT id FROM customers WHERE name = ? AND IFNULL(NULLIF(TRIM(phone_number), '-'), '') = ?";
         List<Long> ids = excludeId != null && excludeId > 0
-                ? jdbcTemplate.query("SELECT id FROM customers WHERE name = ? AND id != ?", (rs, i) -> rs.getLong(1), name, excludeId)
-                : jdbcTemplate.query("SELECT id FROM customers WHERE name = ?", (rs, i) -> rs.getLong(1), name);
+                ? jdbcTemplate.query(sql + " AND id != ?", (rs, i) -> rs.getLong(1), name, normalizedPhone, excludeId)
+                : jdbcTemplate.query(sql, (rs, i) -> rs.getLong(1), name, normalizedPhone);
         return !ids.isEmpty();
     }
 

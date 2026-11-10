@@ -242,36 +242,68 @@ public class BillingWriteService {
     }
 
     private Long resolveCustomer(SaveBillRequest request) {
-        Long customerId = request.getCustomerId() == null ? 0L : request.getCustomerId();
         String name = request.getCustomerName();
         if (name == null || name.isBlank() || "-".equals(name.trim())) {
+            Long customerId = request.getCustomerId() == null ? 0L : request.getCustomerId();
             return customerId > 0 ? customerId : 0L;
         }
-        if (customerId > 0) {
+        name = name.trim();
+        String phone = normPhone(request.getCustomerPhn());
+        Long customerId = request.getCustomerId() == null ? 0L : request.getCustomerId();
+        if (customerId > 0 && customerMatches(customerId, name, phone)) {
             return customerId;
         }
-        List<Long> existing = jdbcTemplate.query(
-                "SELECT id FROM customers WHERE name = ? LIMIT 1",
-                (rs, i) -> rs.getLong(1),
-                name.trim()
-        );
-        if (!existing.isEmpty()) {
-            return existing.get(0);
+        Long existing = findCustomerId(name, phone);
+        if (existing > 0) {
+            return existing;
         }
         KeyHolder keyHolder = new GeneratedKeyHolder();
+        String customerName = name;
+        String customerPhone = phone;
         jdbcTemplate.update(con -> {
             PreparedStatement ps = con.prepareStatement(
                     "INSERT INTO customers(name, date, time, address, phone_number, gstin, is_gst, is_eligible_for_commission) VALUES (?, NOW(), NOW(), '', ?, '', 0, ?)",
                     Statement.RETURN_GENERATED_KEYS
             );
-            ps.setString(1, name.trim());
-            ps.setString(2, request.getCustomerPhn() == null ? "" : request.getCustomerPhn());
+            ps.setString(1, customerName);
+            ps.setString(2, customerPhone);
             ps.setInt(3, request.getIsEligibleForCommission() == null ? 0 : request.getIsEligibleForCommission());
             return ps;
         }, keyHolder);
         long newId = requireGeneratedId(keyHolder);
         jdbcTemplate.update("INSERT INTO customer_account(customer_id, advance, balance) VALUES (?, 0.00, 0.00)", newId);
         return newId;
+    }
+
+    private Long findCustomerId(String name, String phone) {
+        List<Long> existing = jdbcTemplate.query(
+                "SELECT id FROM customers WHERE IFNULL(is_active, 1) = 1 AND name = ? AND IFNULL(NULLIF(TRIM(phone_number), '-'), '') = ? ORDER BY id LIMIT 1",
+                (rs, i) -> rs.getLong(1),
+                name,
+                phone
+        );
+        return existing.isEmpty() ? 0L : existing.get(0);
+    }
+
+    private boolean customerMatches(Long customerId, String name, String phone) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT name, phone_number FROM customers WHERE id = ? AND IFNULL(is_active, 1) = 1",
+                customerId
+        );
+        if (rows.isEmpty()) {
+            return false;
+        }
+        String savedName = rows.get(0).get("name") == null ? "" : String.valueOf(rows.get(0).get("name")).trim();
+        String savedPhone = normPhone(rows.get(0).get("phone_number") == null ? "" : String.valueOf(rows.get(0).get("phone_number")));
+        return savedName.equals(name) && savedPhone.equals(phone);
+    }
+
+    private String normPhone(String phone) {
+        if (phone == null) {
+            return "";
+        }
+        String value = phone.trim();
+        return value.isEmpty() || "-".equals(value) ? "" : value;
     }
 
     private String nextBillNumber(int isTaxBill) {

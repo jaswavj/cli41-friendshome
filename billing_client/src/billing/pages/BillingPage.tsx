@@ -1494,7 +1494,11 @@ const BillingPage: React.FC = () => {
                     onChange={(e) => {
                       markSaleDraft();
                       setCustomerName(e.target.value);
-                      setCustomerId(0);
+                      if (customerId) {
+                        setCustomerId(0);
+                        setExchangePoint(0);
+                        setExchangeUsed(0);
+                      }
                       searchCustomers(e.target.value, undefined, 'name');
                     }}
                     onKeyDown={onCustomerKey('name')}
@@ -1515,7 +1519,11 @@ const BillingPage: React.FC = () => {
                     onChange={(e) => {
                       markSaleDraft();
                       setCustomerPhone(e.target.value);
-                      setCustomerId(0);
+                      if (customerId) {
+                        setCustomerId(0);
+                        setExchangePoint(0);
+                        setExchangeUsed(0);
+                      }
                       searchCustomers(undefined, e.target.value, 'phone');
                     }}
                     onKeyDown={onCustomerKey('phone')}

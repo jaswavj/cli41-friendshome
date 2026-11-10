@@ -469,14 +469,18 @@ public class AdminService {
             throw new RuntimeException("Invalid bill.");
         }
         String cusName = required(request.getCusName(), "Customer name is required.");
-        String cusPhn = request.getCusPhn() == null ? "" : request.getCusPhn().trim();
+        String cusPhn = request.getCusPhn() == null || "-".equals(request.getCusPhn().trim()) ? "" : request.getCusPhn().trim();
         long customerId = request.getCustomerId() == null ? 0 : request.getCustomerId();
         boolean isNew = false;
+        if (customerId > 1 && !customerMatches(customerId, cusName, cusPhn)) {
+            customerId = 0;
+        }
         if (customerId <= 1) {
             List<Long> existing = jdbcTemplate.query(
-                    "SELECT id FROM customers WHERE name = ? AND id > 1 LIMIT 1",
+                    "SELECT id FROM customers WHERE IFNULL(is_active, 1) = 1 AND name = ? AND IFNULL(NULLIF(TRIM(phone_number), '-'), '') = ? AND id > 1 ORDER BY id LIMIT 1",
                     (rs, i) -> rs.getLong(1),
-                    cusName
+                    cusName,
+                    cusPhn
             );
             if (!existing.isEmpty()) {
                 customerId = existing.get(0);
@@ -992,6 +996,22 @@ public class AdminService {
                 productId
         );
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private boolean customerMatches(long customerId, String name, String phone) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT name, phone_number FROM customers WHERE id = ? AND IFNULL(is_active, 1) = 1",
+                customerId
+        );
+        if (rows.isEmpty()) {
+            return false;
+        }
+        String savedName = rows.get(0).get("name") == null ? "" : String.valueOf(rows.get(0).get("name")).trim();
+        String savedPhone = rows.get(0).get("phone_number") == null ? "" : String.valueOf(rows.get(0).get("phone_number")).trim();
+        if ("-".equals(savedPhone)) {
+            savedPhone = "";
+        }
+        return savedName.equals(name) && savedPhone.equals(phone);
     }
 
     private long insertCustomer(String name, String phone) {

@@ -196,6 +196,7 @@ const ExchangePage: React.FC = () => {
                   placeholder="Phone number"
                   onChange={(e) => {
                     setCustPhone(e.target.value);
+                    setCustId(0);
                     searchCust(undefined, e.target.value);
                   }}
                 />
