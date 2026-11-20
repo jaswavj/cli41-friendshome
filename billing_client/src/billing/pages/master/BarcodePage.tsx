@@ -85,17 +85,25 @@ const BarcodePage: React.FC = () => {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    const money = (value: number) =>
+      Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const payload = labels.map((item) => ({
       name: item.name,
       code: item.code,
-      mrp: Number(item.mrp || 0).toFixed(2),
+      mrp: money(Number(item.mrp || 0)),
     }));
     const grouped: typeof payload[] = [];
     for (let i = 0; i < payload.length; i += perRow) {
       grouped.push(payload.slice(i, i + perRow));
     }
-    const svgH = Math.max(8, Math.round(h * 0.4));
-    const svgW = Math.max(16, w - 4);
+    const nameMm = Math.max(2.0, Math.min(2.4, h * 0.08));
+    const mrpMm = Math.max(2.4, Math.min(3.0, h * 0.1));
+    const codeMm = Math.max(1.8, Math.min(2.5, h * 0.085));
+    const chrome = 2.4 + 0.6;
+    const textBlock = nameMm * 1.15 + mrpMm * 1.15 + codeMm * 1.2 + chrome;
+    const room = h - textBlock;
+    const svgH = room >= 5 ? Math.min(h * 0.34, room) : Math.max(3.2, room);
+    const svgW = Math.max(16, w - 3);
     let idx = 0;
     const rowsHtml = grouped
       .map(
@@ -103,7 +111,7 @@ const BarcodePage: React.FC = () => {
           `<div class="row">${row
             .map((item) => {
               const n = idx++;
-              return `<div class="label"><div class="name">${esc(item.name)}</div><div class="mrp">MRP Rs ${item.mrp}</div><svg id="p-${n}"></svg><div class="code">${esc(item.code)}</div></div>`;
+              return `<div class="label"><div class="name">${esc(item.name)}</div><div class="mrp"><span class="mrp-tag">MRP</span><span class="mrp-amt">₹${esc(item.mrp)}</span></div><svg id="p-${n}"></svg><div class="code">${esc(item.code)}</div></div>`;
             })
             .join('')}</div>`
       )
@@ -140,14 +148,55 @@ const BarcodePage: React.FC = () => {
           align-items: center;
           justify-content: center;
         }
-        .name { font-size: ${h >= 28 ? 9 : 8}px; font-weight: 700; line-height: 1.15; max-width: ${w - 2}mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mrp { font-size: ${h >= 28 ? 9 : 8}px; margin: 0.3mm 0; }
-        .code { font-size: 8px; letter-spacing: 0.3px; }
-        svg { width: ${svgW}mm; height: ${svgH}mm; }
+        .name {
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          font-size: ${nameMm.toFixed(2)}mm;
+          font-weight: 700;
+          line-height: 1.1;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .mrp {
+          width: 100%;
+          max-width: 100%;
+          display: flex;
+          align-items: baseline;
+          justify-content: center;
+          gap: 0.8mm;
+          margin: 0.25mm 0 0.35mm;
+          line-height: 1;
+          color: #000;
+          white-space: nowrap;
+          overflow: hidden;
+          min-width: 0;
+        }
+        .mrp-tag { font-size: ${Math.max(1.8, mrpMm * 0.62).toFixed(2)}mm; font-weight: 700; letter-spacing: 0.2px; }
+        .mrp-amt { font-size: ${mrpMm.toFixed(2)}mm; font-weight: 700; letter-spacing: 0.15px; }
+        .code { font-size: ${codeMm.toFixed(2)}mm; letter-spacing: 0.2px; line-height: 1.1; }
+        svg { width: ${svgW}mm; height: ${svgH.toFixed(2)}mm; }
       </style></head><body>
       ${rowsHtml}
       <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
       <script>
+        const fit = (el, minPx) => {
+          let size = parseFloat(getComputedStyle(el).fontSize);
+          while (el.scrollWidth > el.clientWidth + 1 && size > minPx) {
+            size -= 0.25;
+            el.style.fontSize = size + 'px';
+          }
+        };
+        document.querySelectorAll('.name').forEach((el) => fit(el, 4.5));
+        document.querySelectorAll('.mrp').forEach((el) => {
+          const amt = el.querySelector('.mrp-amt');
+          if (!amt) return;
+          let size = parseFloat(getComputedStyle(amt).fontSize);
+          while (el.scrollWidth > el.clientWidth + 1 && size > 8) {
+            size -= 0.25;
+            amt.style.fontSize = size + 'px';
+          }
+        });
         const items = ${JSON.stringify(payload.map((l) => l.code))};
         items.forEach((code, i) => {
           try { JsBarcode('#p-' + i, String(code || ''), { format: 'CODE128', displayValue: false, height: ${Math.max(24, svgH * 2)}, width: 1.15, margin: 0 }); } catch (e) {}
@@ -210,13 +259,13 @@ const BarcodePage: React.FC = () => {
             </div>
           </div>
           <div className="mst-table-wrap">
-            <table className="mst-table">
+            <table className="mst-table bc-products">
               <thead>
                 <tr>
                   <th className="mst-col-idx">#</th>
-                  <th>Item</th>
+                  <th className="bc-item">Item</th>
                   <th className="mst-col-code">Item Code</th>
-                  <th className="num mst-col-num">MRP</th>
+                  <th className="num bc-mrp">MRP</th>
                   <th className="mst-col-num">Qty</th>
                   <th className="mst-col-act">Add</th>
                 </tr>
@@ -230,12 +279,12 @@ const BarcodePage: React.FC = () => {
                 {rows.map((row, i) => (
                   <tr key={row.id}>
                     <td>{page * DEFAULT_PAGE_SIZE + i + 1}</td>
-                    <td>
+                    <td className="bc-item">
                       <div className="bc-name">{row.name}</div>
                       {row.unit ? <div className="mst-note">{row.unit}</div> : null}
                     </td>
                     <td>{row.code || '-'}</td>
-                    <td className="num">₹{Number(row.mrp || 0).toFixed(2)}</td>
+                    <td className="num bc-mrp">₹{Number(row.mrp || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td>
                       <input
                         className="mst-inp"
@@ -267,7 +316,8 @@ const BarcodePage: React.FC = () => {
               <div className="bc-queue" key={item.id}>
                 <div>
                   <div className="bc-name">{item.name}</div>
-                  <div className="mst-note">{item.code} · ₹{Number(item.mrp || 0).toFixed(2)}</div>
+                  <div className="bc-mrp">₹{Number(item.mrp || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="mst-note">{item.code}</div>
                 </div>
                 <input
                   className="mst-inp bc-qty"
